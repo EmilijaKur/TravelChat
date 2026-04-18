@@ -1,0 +1,259 @@
+import socket
+import json
+import os
+from threading import Thread, Lock
+from datetime import datetime
+
+USERS_FILE    = "data/users.json"
+MESSAGES_FILE = "data/messages.json"
+def load_json(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r") as f:
+        return json.load(f)
+
+def save_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+class Server:
+    Clients=[]
+    file_lock = Lock() # prevents two threads writing a file at once
+    def __init__(self, HOST, PORT):        
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #here TCP is implemented
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.bind((HOST, PORT))
+        self.socket.listen(10)
+        print("=== TravelChat server started ===")
+        print(f"Listening on {HOST}:{PORT}\n")
+
+        # RPC: start_rpc_server() would be launched here in a daemon
+        # Thread so travel_data.py can call push to channel  and list channels functions????
+
+    def save_user(self, nickname, channel):
+        """Creates or updates entry by nickname."""
+        with self.file_lock:
+            users = load_json(USERS_FILE)
+            users[nickname] = {
+                "nickname":   nickname,
+                "channel":    channel,
+                "last_seen":  datetime.now().isoformat(),
+                # Perhaps RPC: in future, user preferences (home city, language)
+                
+            }
+            save_json(USERS_FILE, users)
+
+    def save_message(self, nickname, channel, text):
+        """Append a message to the channel's message history."""
+        # RPC: this whole method body can be replaced by an RPC call to message_service.py 
+        # For now writes directly to JSON.
+        with self.file_lock:
+            messages = load_json(MESSAGES_FILE)
+            if channel not in messages:
+                messages[channel] = []
+            messages[channel].append({
+                "nickname":  nickname,
+                "text":      text,
+                "timestamp": datetime.now().isoformat(),
+            })
+            # keep only last 200 messages per channel 
+            messages[channel] = messages[channel][-200:]
+            save_json(MESSAGES_FILE, messages)
+
+    def get_recent_messages(self, channel, count=50):
+        """Return last 50 messages from a channel for the join history display."""
+        # RPC: replace with a function from message_service.py, when it will be running as a separate process
+        messages = load_json(MESSAGES_FILE)
+        return messages.get(channel, [])[-count:]
+    
+    def broadcast_message(self, sender_name, message, channel=None):
+        for client in Server.Clients:
+            if client["nickname"] != sender_name:
+                if channel is None or client["channel"] == channel:
+                    try:
+                        client["socket"].send(message.encode())
+                    except:
+                        pass   
+    
+    def private_message(self, sender_name, target_name, message):
+        for client in Server.Clients:
+            if client["nickname"] == target_name:
+                try:
+                    client["socket"].send(
+                        f"[PM from {sender_name}]: {message}".encode()
+                    )
+                except:
+                    pass
+                return
+        # sender gets notified if target_name not found
+        for client in Server.Clients:
+            if client["nickname"] == sender_name:
+                client["socket"].send(
+                    f"User '{target_name}' not found or offline.".encode()
+                )
+                return
+            
+    def send_to(self, nickname, message):
+        """Send a message to one specific connected user."""
+        for client in Server.Clients:
+            if client["nickname"] == nickname:
+                try:
+                    client["socket"].send(message.encode())
+                except:
+                    pass
+                return
+            
+    def listen(self):
+        try:
+            while True:
+                client_socket, address = self.socket.accept()
+                print("Connection from:", address)
+                nickname = client_socket.recv(1024).decode()
+                client = {
+                "nickname": nickname,
+                "socket": client_socket,
+                "channel": None,
+                }
+                Server.Clients.append(client)
+                self.save_user(nickname, "general")
+                client_socket.send(self._welcome(nickname).encode())
+                # show recent history for #general
+                """self._send_history(nickname, "general")
+                self.broadcast_message(
+                    nickname,
+                    nickname + " has joined the chat!",
+                    "general"
+                )"""
+                Thread(target=self.handle_new_client, args=(client,)).start()
+        except KeyboardInterrupt:
+            print("\nShutting down server...")
+            for client in Server.Clients:
+                try:
+                    client["socket"].close()
+                except:
+                    pass
+            self.socket.close()
+            print("Server closed.")
+
+    def _welcome(self, nickname):
+        return (
+            f"\n🌍 Welcome to TravelChat, {nickname}!\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Share tips, ask questions, explore the world.\n\n"
+            "Commands:\n"
+            "  /join <city>        → join a city/country channel\n"
+            "  /channels           → list active channels\n"
+            "  /who                → who is in your channel\n"
+            "  /history            → show recent messages\n"
+            "  /pm <user> <msg>    → private message a traveller\n"
+            "  /quit               → disconnect\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Start by joining a channel: /join <city>  e.g. /join helsinki\n"
+        )
+    
+    def _send_history(self, nickname, channel):
+        """Send last 50 messages of a channel to the user who just joined."""
+        recent = self.get_recent_messages(channel)
+        if not recent:
+            self.send_to(nickname, f"  (no messages yet in #{channel})\n")
+            return
+        self.send_to(nickname, f"\n  ── last messages in #{channel} ──")
+        for m in recent:
+            dt = datetime.fromisoformat(m["timestamp"])
+            ts = dt.strftime("%d %b %Y")  # e.g. "18 Apr 2026"
+            self.send_to(nickname, f" [{ts}] {m['nickname']}: {m['text']}\n")
+        self.send_to(nickname, "  ─────────────────────────────\n")
+
+    def handle_new_client(self, client):
+        nickname = client["nickname"]
+        sock = client["socket"]
+        while True:
+            try:
+                message =sock.recv(1024).decode().strip()
+                if not message:
+                    break
+                # only /join, /channels, and /quit are allowed before picking a channel
+                if client["channel"] is None:
+                    if message.startswith("/join "):
+                        pass  # handled below in the normal /join block
+                    elif message == "/channels":
+                        pass  # handled below
+                    elif message == "/quit":
+                        break
+                    else:
+                        self.send_to(nickname, "👉 Please join a channel first: /join <city>")
+                        continue
+
+                # join channel
+                if message.startswith("/join "):
+                    new_channel = message.split(" ", 1)[1].lower().strip()
+                    old_channel = client["channel"]
+                    if new_channel == old_channel:
+                        self.send_to(nickname, f"You are already in #{new_channel}.")
+                        continue
+                    client["channel"] = new_channel
+                    self.save_user(nickname, new_channel)
+                    if old_channel is not None:
+                        self.broadcast_message(nickname, f"{nickname} left #{old_channel}", old_channel)
+                    self.broadcast_message(nickname, f"✈  {nickname} joined #{new_channel}", new_channel)
+                    self.send_to(nickname, f"\n✈  Joined #{new_channel}!\n")
+                    # show history of new channel
+                    self._send_history(nickname, new_channel)
+                    # RPC: here call travel_data_service to get a fresh weather/flight snapshot for new_channel and send it to this user
+                    # e.g., result = proxy.get_snapshot(new_channel)
+                    # self.send_to(nickname, result)
+
+                #see active channels
+                elif message == "/channels":
+                    active = set(c["channel"] for c in Server.Clients if c["channel"] is not None)
+                    if active:
+                        self.send_to(nickname,
+                            "Active channels: " + "  ".join(f"#{c}" for c in sorted(active))
+                        )
+                    else:
+                        self.send_to(nickname, "No active channels yet — be the first! /join <city>")
+
+                #see who is in current channel
+                elif message == "/who":
+                    ch = client["channel"]
+                    members = [c["nickname"] for c in Server.Clients if c["channel"] == ch]
+                    self.send_to(nickname, f"In #{ch}: {', '.join(members)}")
+
+                #show recent messages
+                elif message == "/history":
+                    self._send_history(nickname, client["channel"])
+
+                # private message
+                elif message.startswith("/pm "):
+                    parts = message.split(" ", 2)
+                    if len(parts) < 3:
+                        self.send_to(nickname, "Usage: /pm <user> <message>")
+                    else:
+                        _, target, pm_text = parts
+                        self.private_message(nickname, target, pm_text)
+
+                # quit sending messages
+                elif message == "/quit":
+                    break
+
+                # normal message
+                else:
+                    ch= client["channel"]
+                    formatted=f"[#{ch}] {nickname}: {message}"
+                    self.broadcast_message(nickname, formatted, ch)
+                    self.save_message(nickname, ch, message)
+            except:
+                break
+        print(nickname, "disconnected")
+        if client in Server.Clients:
+            Server.Clients.remove(client)
+        self.broadcast_message(nickname, f"👋 {nickname} left the chat.", client["channel"])
+        self.save_user(nickname, client["channel"])  # update last_seen
+        sock.close()
+
+if __name__ == "__main__":
+    HOST = "0.0.0.0"
+    PORT = 5000
+    server = Server(HOST, PORT)
+    server.listen()

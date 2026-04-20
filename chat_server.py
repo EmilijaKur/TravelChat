@@ -1,6 +1,8 @@
 import socket
 import json
 import os
+import xmlrpc.client
+from xmlrpc.server import SimpleXMLRPCServer
 from threading import Thread, Lock
 from datetime import datetime
 
@@ -28,8 +30,27 @@ class Server:
         print("=== TravelChat server started ===")
         print(f"Listening on {HOST}:{PORT}\n")
 
-        # RPC: start_rpc_server() would be launched here in a daemon
-        # Thread so travel_data.py can call push to channel  and list channels functions????
+        # RPC client: connects to message_service.py for save/fetch of messages
+        self.msg_rpc = xmlrpc.client.ServerProxy("http://localhost:5002/", allow_none=True)
+        # RPC server: launched in a daemon thread on port 5001
+        # so travel_data.py can call push_to_channel and list_channels
+        self._start_rpc_server()
+
+    def _start_rpc_server(self):
+        rpc = SimpleXMLRPCServer(("localhost", 5001), allow_none=True, logRequests=False)
+        rpc.register_function(self.rpc_push_to_channel, "push_to_channel")
+        rpc.register_function(self.rpc_list_channels,   "list_channels")
+        Thread(target=rpc.serve_forever, daemon=True).start()
+        print("=== RPC endpoint for travel_data.py on localhost:5001 ===\n")
+
+    def rpc_push_to_channel(self, channel, message):
+        # called by travel_data.py to push a weather/flight update into a channel
+        self.broadcast_message("__travel__", f"🌤 [{channel}] {message}", channel)
+        return True
+
+    def rpc_list_channels(self):
+        # called by travel_data.py to know which channels are currently active
+        return list(set(c["channel"] for c in Server.Clients if c["channel"] is not None))
 
     def save_user(self, nickname, channel):
         """Creates or updates entry by nickname."""
@@ -46,26 +67,21 @@ class Server:
 
     def save_message(self, nickname, channel, text):
         """Append a message to the channel's message history."""
-        # RPC: this whole method body can be replaced by an RPC call to message_service.py 
-        # For now writes directly to JSON.
-        with self.file_lock:
-            messages = load_json(MESSAGES_FILE)
-            if channel not in messages:
-                messages[channel] = []
-            messages[channel].append({
-                "nickname":  nickname,
-                "text":      text,
-                "timestamp": datetime.now().isoformat(),
-            })
-            # keep only last 200 messages per channel 
-            messages[channel] = messages[channel][-200:]
-            save_json(MESSAGES_FILE, messages)
+        # RPC: forwards to message_service.py (port 5002) instead of writing JSON directly
+        # chat continues even if message_service is down — message just won't be saved
+        try:
+            self.msg_rpc.save_message(nickname, channel, text)
+        except Exception as e:
+            print(f"[WARN] message_service RPC save failed: {e}")
 
     def get_recent_messages(self, channel, count=50):
         """Return last 50 messages from a channel for the join history display."""
-        # RPC: replace with a function from message_service.py, when it will be running as a separate process
-        messages = load_json(MESSAGES_FILE)
-        return messages.get(channel, [])[-count:]
+        # RPC: fetches from message_service.py (port 5002) running as a separate process
+        try:
+            return self.msg_rpc.get_recent_messages(channel, count)
+        except Exception as e:
+            print(f"[WARN] message_service RPC fetch failed: {e}")
+            return [] # return empty so _send_history degrades gracefully
     
     def broadcast_message(self, sender_name, message, channel=None):
         for client in Server.Clients:

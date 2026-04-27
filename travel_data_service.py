@@ -7,19 +7,20 @@ PORT = 5003
 POLL_INTERVAL = 60
 CHAT_RPC = "http://localhost:5001/"
 
-locations = {
-    "helsinki":   (60.17, 24.94),
-    "vilnius":    (54.69, 25.28),
-    "bratislava": (48.15, 17.11),
-    "kyiv":       (50.45, 30.52),
-}
-
-#Fetches current weather for a city using Open-Meteo API
+#Fetches current weather for any city using Open-Meteo geocoding and weather API
 def weather(city):
-    coords = locations.get(city)
-    if coords is None:
+    geo_url = "https://geocoding-api.open-meteo.com/v1/search?name=" + city + "&count=1"
+    try:
+        geo = requests.get(geo_url, timeout=5)
+        geo.raise_for_status()
+        results = geo.json().get("results")
+        if not results:
+            return None
+        lat = results[0]["latitude"]
+        lon = results[0]["longitude"]
+    except Exception as e:
+        print("Geocoding failed for " + city + ": " + str(e))
         return None
-    lat, lon = coords
     loc_url = "https://api.open-meteo.com/v1/forecast?latitude=" + str(lat) + "&longitude=" + str(lon) + "&current=temperature_2m,windspeed_10m"
     try:
         answer = requests.get(loc_url, timeout=5)

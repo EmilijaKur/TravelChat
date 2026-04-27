@@ -216,9 +216,13 @@ class Server:
                     self.send_to(nickname, f"\n✈  Joined #{new_channel}!\n")
                     # show history of new channel
                     self._send_history(nickname, new_channel)
-                    # RPC: here call travel_data_service to get a fresh weather/flight snapshot for new_channel and send it to this user
-                    # e.g., result = proxy.get_snapshot(new_channel)
-                    # self.send_to(nickname, result)
+                    try:
+                        travel_rpc = xmlrpc.client.ServerProxy("http://localhost:5003/", allow_none=True)
+                        snapshot = travel_rpc.get_snapshot(new_channel)
+                        if snapshot:
+                            self.send_to(nickname, snapshot)
+                    except Exception as e:
+                        print(f"[WARN] travel_data_service snapshot failed: {e}")
 
                 #see active channels
                 elif message == "/channels":

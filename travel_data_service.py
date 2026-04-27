@@ -1,6 +1,7 @@
 import xmlrpc.client
 import requests
 import time
+from xmlrpc.server import SimpleXMLRPCServer
 from threading import Thread
 
 PORT = 5003
@@ -32,6 +33,9 @@ def weather(city):
     except Exception as e:
         print("Weather fetch failed for " + city + ": " + str(e))
         return None
+    
+def get_snapshot(city):
+    return weather(city)
 
 #Runs in background, asks chat server which channels are active and pushes weather into them
 def gettingweather():
@@ -50,9 +54,9 @@ def gettingweather():
         time.sleep(POLL_INTERVAL)
 
 def main():
-    weather_info = Thread(target=gettingweather)
-    weather_info.daemon = True
-    weather_info.start()
-    weather_info.join()
-
+    rpc = SimpleXMLRPCServer(("0.0.0.0", 5003), allow_none=True, logRequests=False)
+    rpc.register_function(get_snapshot, "get_snapshot")
+    print("travel_data_service started")
+    rpc.serve_forever()
+    
 main()

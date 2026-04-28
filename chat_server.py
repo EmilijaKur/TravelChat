@@ -1,6 +1,8 @@
 import socket
 import json
 import os
+import sys
+import signal 
 import xmlrpc.client
 from xmlrpc.server import SimpleXMLRPCServer
 from threading import Thread, Lock
@@ -27,6 +29,10 @@ class Server:
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind((HOST, PORT))
         self.socket.listen(10)
+        signal.signal(signal.SIGINT, self.shutdown_handler)
+        #Connection status flags
+        self.msg_service_online = True
+        self.travel_service_online = True
         print("=== TravelChat server started ===")
         print(f"Listening on {HOST}:{PORT}\n")
 
@@ -35,13 +41,25 @@ class Server:
         # RPC server: launched in a daemon thread on port 5001
         # so travel_data.py can call push_to_channel and list_channels
         self._start_rpc_server()
+    def shutdown_handler(self, sig, frame):
+        """This function runs when you press Ctrl+C and want to shut down server."""
+        print("\n\nShutting down TravelChat server ===")
+        for client in self.Clients:
+            try:
+                client["socket"].close()
+            except:
+                pass        
+        # Close main server socket
+        self.socket.close()
+        print("Server closed. Goodbye!")
+        sys.exit(0) 
 
     def _start_rpc_server(self):
         rpc = SimpleXMLRPCServer(("localhost", 5001), allow_none=True, logRequests=False)
         rpc.register_function(self.rpc_push_to_channel, "push_to_channel")
         rpc.register_function(self.rpc_list_channels,   "list_channels")
         Thread(target=rpc.serve_forever, daemon=True).start()
-        print("=== RPC endpoint for travel_data.py on localhost:5001 ===\n")
+        
 
     def rpc_push_to_channel(self, channel, message):
         # called by travel_data.py to push a weather/flight update into a channel
@@ -71,16 +89,27 @@ class Server:
         # chat continues even if message_service is down — message just won't be saved
         try:
             self.msg_rpc.save_message(nickname, channel, text)
+            if not self.msg_service_online:
+                print("[INFO] Connection restored to message service.")
+                self.msg_service_online = True
         except Exception as e:
-            print(f"[WARN] message_service RPC save failed: {e}")
+            if self.msg_service_online:
+                print("[ERROR] Lost connection to message service. History will not be saved.")
+                self.msg_service_online = False
 
     def get_recent_messages(self, channel, count=50):
         """Return last 50 messages from a channel for the join history display."""
         # RPC: fetches from message_service.py (port 5002) running as a separate process
         try:
-            return self.msg_rpc.get_recent_messages(channel, count)
+            messages = self.msg_rpc.get_recent_messages(channel, count)
+            if not self.msg_service_online:
+                print("[INFO] Connection restored to message service.")
+                self.msg_service_online = True
+            return messages
         except Exception as e:
-            print(f"[WARN] message_service RPC fetch failed: {e}")
+            if self.msg_service_online:
+                print("[ERROR] Cannot fetch history: message service is offline.")
+                self.msg_service_online = False
             return [] # return empty so _send_history degrades gracefully
     
     def broadcast_message(self, sender_name, message, channel=None):
@@ -141,11 +170,12 @@ class Server:
                     nickname + " has joined the chat!",
                     "general"
                 )"""
-                Thread(target=self.handle_new_client, args=(client,)).start()
+                Thread(target=self.handle_new_client, args=(client,), daemon=True).start()
         except KeyboardInterrupt:
             print("\nShutting down server...")
             for client in Server.Clients:
                 try:
+                    client["socket"].send("Server shut down".encode())
                     client["socket"].close()
                 except:
                     pass
@@ -219,18 +249,31 @@ class Server:
                     try:
                         travel_rpc = xmlrpc.client.ServerProxy("http://localhost:5003/", allow_none=True)
                         snapshot = travel_rpc.get_snapshot(new_channel)
+                        if not self.travel_service_online:
+                            print(f"[INFO] Connection restored to travel data service.")
+                            self.travel_service_online= True
                         if snapshot:
                             self.send_to(nickname, snapshot)
-                    except Exception as e:
-                        print(f"[WARN] travel_data_service snapshot failed: {e}")
+                    except Exception:
+                         if self.travel_service_online:
+                            print(f"[ERROR] Travel Data Service is offline. Weather updates disabled.")
+                            self.travel_service_online = False
 
                 #see active channels
                 elif message == "/channels":
-                    active = set(c["channel"] for c in Server.Clients if c["channel"] is not None)
-                    if active:
-                        self.send_to(nickname,
-                            "Active channels: " + "  ".join(f"#{c}" for c in sorted(active))
-                        )
+                    active_now= set(c["channel"] for c in Server.Clients if c["channel"] is not None)
+                    try:
+                        recorded_channels = set(self.msg_rpc.get_all_channels())
+                    except:
+                        recorded_channels = set()
+                        print("[WARN] Could not fetch channel list from message_service")
+                    all_channels = active_now.union(recorded_channels)
+                    if all_channels:
+                        formatted = []
+                        for c in sorted(all_channels):
+                            status = "(active)" if c in active_now else ""
+                            formatted.append(f"#{c}{status}")            
+                        self.send_to(nickname, "Available channels: " + "  ".join(formatted))
                     else:
                         self.send_to(nickname, "No active channels yet — be the first! /join <city>")
 

@@ -1,19 +1,19 @@
 {
   "paris": [
     {
-      "nickname": "bubu",
+      "nickname": "kuka",
       "text": "Hi",
-      "timestamp": "2026-04-18T11:03:30.017487"
+      "timestamp": "2026-04-28T13:13:45.200982"
     },
     {
-      "nickname": "bubu",
-      "text": "dirty city",
-      "timestamp": "2026-04-18T11:04:13.152253"
+      "nickname": "lola",
+      "text": "Hi, do you know a good place to eat?",
+      "timestamp": "2026-04-28T13:14:23.607232"
     },
     {
-      "nickname": "kiki",
-      "text": "bye",
-      "timestamp": "2026-04-18T11:04:53.945334"
+      "nickname": "fin",
+      "text": "Hi",
+      "timestamp": "2026-04-28T13:34:15.391720"
     }
   ]
 }

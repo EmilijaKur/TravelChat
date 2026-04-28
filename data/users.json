@@ -1,12 +1,32 @@
 {
-  "bubu": {
-    "nickname": "bubu",
-    "channel": "paris",
-    "last_seen": "2026-04-18T11:06:37.000677"
-  },
-  "kiki": {
-    "nickname": "kiki",
+  "kuka": {
+    "nickname": "kuka",
     "channel": "london",
-    "last_seen": "2026-04-18T11:09:13.640125"
+    "last_seen": "2026-04-28T13:16:41.958460"
+  },
+  "lola": {
+    "nickname": "lola",
+    "channel": "paris",
+    "last_seen": "2026-04-28T13:17:06.737806"
+  },
+  "tom": {
+    "nickname": "tom",
+    "channel": null,
+    "last_seen": "2026-04-28T13:26:57.072985"
+  },
+  "din": {
+    "nickname": "din",
+    "channel": null,
+    "last_seen": "2026-04-28T13:31:00.220505"
+  },
+  "fin": {
+    "nickname": "fin",
+    "channel": "paris",
+    "last_seen": "2026-04-28T13:34:42.165004"
+  },
+  "joe": {
+    "nickname": "joe",
+    "channel": "helsinki",
+    "last_seen": "2026-04-28T13:38:14.324275"
   }
 }

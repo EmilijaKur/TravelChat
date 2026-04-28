@@ -47,12 +47,23 @@ def get_recent_messages(channel, count=50):
         }
         for m in recent
     ]
+def get_all_channels():
+    """returns a list of all channels that have saved messages."""
+    with file_lock:
+        messages = load_json(MESSAGES_FILE)
+        return list(messages.keys())
 
 if __name__ == "__main__":
     HOST = "localhost"
     PORT = 5002
-    server = SimpleXMLRPCServer((HOST, PORT), allow_none=True, logRequests=False)
-    server.register_function(save_message,        "save_message")
-    server.register_function(get_recent_messages, "get_recent_messages")
-    print(f"=== message_service (XML-RPC) running on {HOST}:{PORT} ===")
-    server.serve_forever()
+    try:
+        server = SimpleXMLRPCServer((HOST, PORT), allow_none=True, logRequests=False)
+        server.register_function(save_message,        "save_message")
+        server.register_function(get_recent_messages, "get_recent_messages")
+        server.register_function(get_all_channels, "get_all_channels")
+        print(f"Message service started, running on {HOST}:{PORT}")
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("===Message service shutting down===")
+    except Exception as e:
+        print(f"[ERROR] Service failed: {e}")

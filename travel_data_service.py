@@ -54,9 +54,15 @@ def gettingweather():
         time.sleep(POLL_INTERVAL)
 
 def main():
-    rpc = SimpleXMLRPCServer(("0.0.0.0", 5003), allow_none=True, logRequests=False)
-    rpc.register_function(get_snapshot, "get_snapshot")
-    print("travel_data_service started")
-    rpc.serve_forever()
+    try:
+        rpc = SimpleXMLRPCServer(("0.0.0.0", 5003), allow_none=True, logRequests=False)
+        rpc.register_function(get_snapshot, "get_snapshot")
+        print("Travel data service started")
+        rpc.serve_forever()
+    except KeyboardInterrupt:
+        print("===Travel data service shutting down===")
+        # The RPC server stops automatically when serve_forever is interrupted
+    except Exception as e:
+        print(f"[FATAL ERROR] {e}")
     
 main()

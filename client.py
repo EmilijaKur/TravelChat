@@ -5,7 +5,11 @@ import sys
 class Client:
     def __init__(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #uses TCP
-        self.socket.connect((host, port))
+        try:
+            self.socket.connect((host, port))
+        except ConnectionRefusedError:
+            print(f"Could not connect to server at {host}:{port}. Check if the server is running and try again.")
+            sys.exit()
         self.nickname = input("Enter your nickname: ").strip()
         self.socket.send(self.nickname.encode())
         Thread(target=self.receive_messages, daemon=True).start()
@@ -44,6 +48,10 @@ class Client:
                 break
 
 if __name__ == "__main__":
-    HOST = input("Server IP: ").strip() or "127.0.0.1"
-    PORT = 5000
-    Client(HOST, PORT)
+    try: 
+        HOST = input("Server IP: ").strip() or "127.0.0.1"
+        PORT = 5000
+        Client(HOST, PORT)
+    except KeyboardInterrupt:
+        print("\n\nClosing chat. Goodbye!")
+        sys.exit(0)

@@ -28,5 +28,40 @@
     "nickname": "joe",
     "channel": "helsinki",
     "last_seen": "2026-04-28T13:38:14.324275"
+  },
+  "Someone": {
+    "nickname": "Someone",
+    "channel": "helsinki",
+    "last_seen": "2026-04-29T19:39:11.297075"
+  },
+  "something": {
+    "nickname": "something",
+    "channel": "<city>",
+    "last_seen": "2026-04-28T20:48:43.157319"
+  },
+  "Someone2.0": {
+    "nickname": "Someone2.0",
+    "channel": "helsinki",
+    "last_seen": "2026-04-29T19:16:40.620533"
+  },
+  "\u042b\u0449\u044c\u0443\u0449\u0442\u0443": {
+    "nickname": "\u042b\u0449\u044c\u0443\u0449\u0442\u0443",
+    "channel": "paris",
+    "last_seen": "2026-04-29T19:32:02.076777"
+  },
+  "Somene2.0": {
+    "nickname": "Somene2.0",
+    "channel": "helsinki",
+    "last_seen": "2026-04-29T19:39:10.842743"
+  },
+  "user1": {
+    "nickname": "user1",
+    "channel": "paris",
+    "last_seen": "2026-04-29T20:02:49.920847"
+  },
+  "user2": {
+    "nickname": "user2",
+    "channel": "helsinki",
+    "last_seen": "2026-04-29T20:00:13.642976"
   }
 }

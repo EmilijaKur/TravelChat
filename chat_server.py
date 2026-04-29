@@ -4,12 +4,17 @@ import os
 import sys
 import signal 
 import xmlrpc.client
+import urllib.error
+import urllib.parse
+import urllib.request
 from xmlrpc.server import SimpleXMLRPCServer
 from threading import Thread, Lock
 from datetime import datetime
 
 USERS_FILE    = "data/users.json"
 MESSAGES_FILE = "data/messages.json"
+MESSAGE_SERVICE_BASE_URL = "http://localhost:5002"
+
 def load_json(path):
     if not os.path.exists(path):
         return {}
@@ -36,8 +41,7 @@ class Server:
         print("=== TravelChat server started ===")
         print(f"Listening on {HOST}:{PORT}\n")
 
-        # RPC client: connects to message_service.py for save/fetch of messages
-        self.msg_rpc = xmlrpc.client.ServerProxy("http://localhost:5002/", allow_none=True)
+        # REST client: connects to message_service.py for save/fetch of messages
         # RPC server: launched in a daemon thread on port 5001
         # so travel_data.py can call push_to_channel and list_channels
         self._start_rpc_server()
@@ -85,10 +89,14 @@ class Server:
 
     def save_message(self, nickname, channel, text):
         """Append a message to the channel's message history."""
-        # RPC: forwards to message_service.py (port 5002) instead of writing JSON directly
+        # REST: forwards to message_service.py (port 5002) instead of writing JSON directly
         # chat continues even if message_service is down — message just won't be saved
         try:
-            self.msg_rpc.save_message(nickname, channel, text)
+            self._post_message_history("/messages", {
+                "nickname": nickname,
+                "channel": channel,
+                "text": text,
+            })
             if not self.msg_service_online:
                 print("[INFO] Connection restored to message service.")
                 self.msg_service_online = True
@@ -99,9 +107,10 @@ class Server:
 
     def get_recent_messages(self, channel, count=50):
         """Return last 50 messages from a channel for the join history display."""
-        # RPC: fetches from message_service.py (port 5002) running as a separate process
+        # REST: fetches from message_service.py (port 5002) running as a separate process
         try:
-            messages = self.msg_rpc.get_recent_messages(channel, count)
+            payload = self._get_message_history(f"/messages/{urllib.parse.quote(channel)}?count={count}")
+            messages = payload.get("messages", [])
             if not self.msg_service_online:
                 print("[INFO] Connection restored to message service.")
                 self.msg_service_online = True
@@ -148,6 +157,24 @@ class Server:
                 except:
                     pass
                 return
+
+    def _message_service_request(self, path, method="GET", payload=None):
+        url = f"{MESSAGE_SERVICE_BASE_URL}{path}"
+        data = None
+        headers = {}
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        with urllib.request.urlopen(request, timeout=5) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else {}
+
+    def _post_message_history(self, path, payload):
+        return self._message_service_request(path, method="POST", payload=payload)
+
+    def _get_message_history(self, path):
+        return self._message_service_request(path, method="GET")
             
     def listen(self):
         try:
@@ -263,8 +290,8 @@ class Server:
                 elif message == "/channels":
                     active_now= set(c["channel"] for c in Server.Clients if c["channel"] is not None)
                     try:
-                        recorded_channels = set(self.msg_rpc.get_all_channels())
-                    except:
+                        recorded_channels = set(self._get_message_history("/channels").get("channels", []))
+                    except Exception:
                         recorded_channels = set()
                         print("[WARN] Could not fetch channel list from message_service")
                     all_channels = active_now.union(recorded_channels)
@@ -304,8 +331,8 @@ class Server:
                 else:
                     ch= client["channel"]
                     formatted=f"[#{ch}] {nickname}: {message}"
-                    self.broadcast_message(nickname, formatted, ch)
                     self.save_message(nickname, ch, message)
+                    self.broadcast_message(nickname, formatted, ch)
             except:
                 break
         print(nickname, "disconnected")

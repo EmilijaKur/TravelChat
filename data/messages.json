@@ -14,6 +14,63 @@
       "nickname": "fin",
       "text": "Hi",
       "timestamp": "2026-04-28T13:34:15.391720"
+    },
+    {
+      "nickname": "Someone",
+      "text": "Hello",
+      "timestamp": "2026-04-29T19:35:40.856829"
+    },
+    {
+      "nickname": "Somene2.0",
+      "text": "Hello",
+      "timestamp": "2026-04-29T19:36:33.422655"
+    },
+    {
+      "nickname": "Someone",
+      "text": "hello",
+      "timestamp": "2026-04-29T19:37:07.867241"
+    },
+    {
+      "nickname": "Someone",
+      "text": "1",
+      "timestamp": "2026-04-29T19:37:13.334749"
+    },
+    {
+      "nickname": "Someone",
+      "text": "23456",
+      "timestamp": "2026-04-29T19:37:15.409147"
+    },
+    {
+      "nickname": "user1",
+      "text": "Hi",
+      "timestamp": "2026-04-29T19:55:41.625953"
+    }
+  ],
+  "helsinki": [
+    {
+      "nickname": "user2",
+      "text": "Hi",
+      "timestamp": "2026-04-29T19:53:44.329284"
+    },
+    {
+      "nickname": "user1",
+      "text": "Hi",
+      "timestamp": "2026-04-29T19:53:49.793624"
+    },
+    {
+      "nickname": "user2",
+      "text": "Hi",
+      "timestamp": "2026-04-29T20:01:05.758594"
+    },
+    {
+      "nickname": "user1",
+      "text": "Hi",
+      "timestamp": "2026-04-29T20:01:13.759785"
+    },
+    {
+      "nickname": "user1",
+      "text": "/chanels",
+      "timestamp": "2026-04-29T20:02:13.795430"
     }
   ]
 }

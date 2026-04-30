@@ -9,7 +9,7 @@ from threading import Thread, Lock
 from datetime import datetime
 
 USERS_FILE    = "data/users.json"
-MESSAGES_FILE = "data/messages.json"
+
 def load_json(path):
     if not os.path.exists(path):
         return {}
